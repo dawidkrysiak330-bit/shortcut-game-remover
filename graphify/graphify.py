@@ -12,6 +12,7 @@ import argparse, json, os, re, sys, threading, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+import router as ext
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC = APP_DIR / "static"
@@ -140,10 +141,22 @@ def make_handler(root: Path):
             self.end_headers()
             self.wfile.write(body)
 
+        def guard(self, post=False):
+            # blokada DNS-rebinding i cross-site POST: tylko localhost, POST tylko application/json
+            host = self.headers.get("Host", "").split(":")[0]
+            if host not in ("127.0.0.1", "localhost"):
+                self.send(403, {"error": "bad host"}); return False
+            if post and "application/json" not in self.headers.get("Content-Type", ""):
+                self.send(415, {"error": "json required"}); return False
+            return True
+
         def do_GET(self):
+            if not self.guard(): return
             u = urlparse(self.path)
             q = parse_qs(u.query)
             try:
+                r = ext.handle("GET", u.path, q, None, root)
+                if r: return self.send(*r)
                 if u.path == "/api/graph":
                     return self.send(200, scan(root))
                 if u.path == "/api/file":
@@ -164,9 +177,12 @@ def make_handler(root: Path):
                 self.send(400, {"error": str(e)})
 
         def do_POST(self):
+            if not self.guard(True): return
             u = urlparse(self.path)
             try:
                 data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                r = ext.handle("POST", u.path, {}, data, root)
+                if r: return self.send(*r)
                 if u.path == "/api/layout":
                     DATA.mkdir(exist_ok=True)
                     (DATA / "layout.json").write_text(json.dumps(data))

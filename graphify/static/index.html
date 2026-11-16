@@ -22,6 +22,17 @@ label{background:var(--panel);border:1px solid var(--line);border-radius:8px;pad
 #legend{position:absolute;left:12px;bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--mute);max-width:60%}
 #legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 4px 0 10px}#legend i:first-child{margin-left:0}
 @media(max-width:760px){#app{grid-template-columns:1fr;grid-template-rows:1fr 45%}#side{border-left:0;border-top:1px solid var(--line)}}
+
+#tabs{display:flex;border-bottom:1px solid var(--line)}#tabs button{flex:1;border:0;border-radius:0;background:none;color:var(--mute);padding:10px 4px}
+#tabs button.on{color:var(--acc);box-shadow:inset 0 -2px var(--acc)}
+.tab{display:none;flex:1;min-height:0;flex-direction:column;overflow:auto}.tab.on{display:flex}
+.pad{padding:10px 16px}.row{display:flex;gap:8px;align-items:center}.hint{color:var(--mute);font-size:12px}
+label.plain{border:0;background:none;padding:0;font-size:12px}select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px}
+#skillpick label,.sk{display:block;margin:4px 0;padding:6px 8px;font-size:12px}.sk b{color:var(--text)}
+#log{flex:1;overflow:auto;padding:0 16px;min-height:80px}.m{margin:8px 0;padding:8px 10px;border-radius:8px;white-space:pre-wrap;font-size:13px}
+.m.user{background:var(--bg)}.m.ai{border:1px solid var(--line)}.m small{color:var(--mute);display:block;margin-top:4px}
+#msg,#rcfg{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:12.5px ui-monospace,monospace;resize:none}
+#rcfg{margin:0 16px;min-height:200px;flex:1}code{background:var(--bg);padding:1px 4px;border-radius:4px}
 </style></head><body>
 <div id="app">
  <div id="stage"><canvas id="c"></canvas>
@@ -32,10 +43,24 @@ label{background:var(--panel);border:1px solid var(--line);border-radius:8px;pad
    <button id="rescan">⟳ Skanuj</button><button id="fit">Dopasuj</button><button id="new">＋ Notatka</button>
   </div><div id="legend"></div></div>
  <aside id="side">
+ <div id="tabs"><button data-t="node" class="on">Węzeł</button><button data-t="chat">Czat AI</button><button data-t="skills">Skille</button><button data-t="router">Router</button></div>
+ <section id="tab-node" class="tab on">
   <h2 id="title">Graphify</h2><div id="meta">Kliknij węzeł. Przeciągaj, przybliżaj kółkiem, przesuwaj tło.</div>
   <div id="nb"></div><textarea id="txt" spellcheck="false" hidden></textarea>
   <div id="act"><button id="save" hidden>Zapisz</button></div>
- </aside>
+ </section>
+ <section id="tab-chat" class="tab">
+  <div class="pad"><b>Skille w kontekście</b><div id="skillpick"></div>
+   <div class="row"><select id="route"></select><label class="plain"><input type="checkbox" id="usenote" checked> notatka + sąsiedzi</label></div></div>
+  <div id="log"></div>
+  <div class="pad row"><textarea id="msg" rows="2" placeholder="Zapytaj o zaznaczony węzeł… (Ctrl+Enter)"></textarea><button id="send">Wyślij</button></div>
+ </section>
+ <section id="tab-skills" class="tab"><div class="pad" id="skilllist"></div>
+  <p class="pad hint">Skille to foldery <code>skills/&lt;nazwa&gt;/SKILL.md</code> (format Agent Skills). Dodaj własny, odśwież kartę. Możesz je skopiować do <code>~/.claude/skills</code>.</p></section>
+ <section id="tab-router" class="tab"><div class="pad"><div id="rstat"></div>
+  <p class="hint">Endpoint zgodny z OpenAI: <code id="ep"></code><br>Model = nazwa trasy (np. <code>default</code>) lub <code>dostawca/model</code>. Klucze: pole <code>api_key</code> albo zmienna środowiskowa <code>api_key_env</code>.</p></div>
+  <textarea id="rcfg" spellcheck="false"></textarea><div class="pad row"><button id="rsave">Zapisz konfigurację</button></div></section>
+</aside>
 </div>
 <script>
 const $=id=>document.getElementById(id),cv=$('c'),ctx=cv.getContext('2d');
@@ -113,7 +138,7 @@ cv.onwheel=e=>{e.preventDefault();const k=Math.min(4,Math.max(.1,view.k*(e.delta
  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left-r.width/2,my=e.clientY-r.top-r.height/2;
  view.x=mx-(mx-view.x)*k/view.k;view.y=my-(my-view.y)*k/view.k;view.k=k};
 let dirty=false;async function saveLayout(){
- await api('/api/layout',{method:'POST',body:JSON.stringify(Object.fromEntries(N.map(n=>[n.id,{x:Math.round(n.x),y:Math.round(n.y)}])))})}
+ await api('/api/layout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(N.map(n=>[n.id,{x:Math.round(n.x),y:Math.round(n.y)}])))})}
 async function select(n){
  sel=n;const nb=$('nb'),t=$('txt'),sv=$('save');nb.innerHTML='';
  if(!n){$('title').textContent='Graphify';$('meta').textContent='Kliknij węzeł.';t.hidden=sv.hidden=true;return}
@@ -126,11 +151,42 @@ async function select(n){
  sv.textContent='Zapisz'}
 function centerOn(n){view.x=-n.x*view.k;view.y=-n.y*view.k}
 $('save').onclick=async()=>{
- if(sel.kind==='ghost'){await api('/api/note',{method:'POST',body:JSON.stringify({title:sel.label})});await load(true);return}
- await api('/api/save',{method:'POST',body:JSON.stringify({path:sel.id,content:$('txt').value})});const id=sel.id;await load(true);select(byId[id]);alpha=.3};
+ if(sel.kind==='ghost'){await api('/api/note',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:sel.label})});await load(true);return}
+ await api('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:sel.id,content:$('txt').value})});const id=sel.id;await load(true);select(byId[id]);alpha=.3};
 $('new').onclick=async()=>{const t=prompt('Tytuł nowej notatki:');if(!t)return;
- const r=await api('/api/note',{method:'POST',body:JSON.stringify({title:t})});await load(true);if(r.path)select(byId[r.path])};
+ const r=await api('/api/note',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t})});await load(true);if(r.path)select(byId[r.path])};
 $('rescan').onclick=()=>{load(true);alpha=.5};$('fit').onclick=fit;
 $('q').oninput=e=>query=e.target.value;$('tags').onchange=$('ghosts').onchange=()=>alpha=.4;
 addEventListener('resize',resize);resize();load().then(()=>requestAnimationFrame(draw));
+
+// ---- zakładki, czat, skille, router ----
+let skills=[],chat=[];
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('#tabs button,.tab').forEach(x=>x.classList.remove('on'));
+ b.classList.add('on');$('tab-'+b.dataset.t).classList.add('on');
+ if(b.dataset.t==='router')loadRouter();if(b.dataset.t==='skills'||b.dataset.t==='chat')loadSkills()});
+async function loadSkills(){
+ skills=await api('/api/skills');const have=new Set([...document.querySelectorAll('#skillpick input:checked')].map(i=>i.value));
+ $('skillpick').innerHTML=skills.map(s=>`<label class="plain" title="${s.description.replace(/"/g,'')}"><input type="checkbox" value="${s.name}" ${have.has(s.name)?'checked':''}> <b>${s.name}</b></label>`).join('');
+ $('skilllist').innerHTML=skills.map(s=>`<div class="sk"><b>${s.name}</b> <span class="hint">skills/${s.dir}/SKILL.md</span><br>${s.description}</div>`).join('')||'Brak skilli.'}
+async function loadRouter(){
+ const r=await api('/api/router');$('rcfg').value=JSON.stringify(r.config,null,2);
+ $('ep').textContent=location.origin+'/v1/chat/completions';
+ $('rstat').innerHTML=Object.entries(r.stats).map(([n,a])=>`<div class="sk"><b>${n}</b> ✓${a.ok} ✗${a.fail}${a.avg_ms?' · ~'+a.avg_ms+' ms':''}${a.paused_s?' · pauza '+a.paused_s+' s':''}</div>`).join('')||'<span class="hint">Brak zapytań.</span>';
+ $('route').innerHTML=Object.keys(r.config.routes).map(k=>`<option>${k}</option>`).join('')}
+$('rsave').onclick=async()=>{try{const r=await api('/api/router',{method:'POST',headers:{'Content-Type':'application/json'},body:$('rcfg').value});
+ alert(r.error||'Zapisano');loadRouter()}catch(e){alert(e)}};
+function bubble(cls,t,small){const d=document.createElement('div');d.className='m '+cls;d.textContent=t;
+ if(small){const s=document.createElement('small');s.textContent=small;d.append(s)}$('log').append(d);$('log').scrollTop=1e9}
+async function send(){
+ const t=$('msg').value.trim();if(!t)return;$('msg').value='';chat.push({role:'user',content:t});bubble('user',t);
+ const notes=$('usenote').checked&&sel&&sel.kind==='file'?[...neigh(sel)].filter(n=>n.kind==='file').map(n=>n.id):[];
+ const sk=[...document.querySelectorAll('#skillpick input:checked')].map(i=>i.value);
+ $('send').disabled=true;
+ try{const r=await api('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({messages:chat,notes,skills:sk,route:$('route').value||'default'})});
+  if(r.error){bubble('ai','Błąd: '+r.error)}else{chat.push({role:'assistant',content:r.reply});bubble('ai',r.reply,r.provider+'/'+r.model)}}
+ catch(e){bubble('ai','Błąd: '+e)}$('send').disabled=false}
+$('send').onclick=send;$('msg').onkeydown=e=>{if(e.key==='Enter'&&e.ctrlKey)send()};
+loadSkills();loadRouter();
 </script></body></html>

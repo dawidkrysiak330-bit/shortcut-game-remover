@@ -1,0 +1,43 @@
+/* Prosty, czytelny styl. Bez frameworka CSS. */
+:root { --fg: #1d2330; --muted: #667085; --bg: #f6f7f9; --card: #fff; --accent: #2457d6; --danger: #c0352b; --warn: #fff6db; --border: #e2e5ea; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
+.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.narrow { max-width: 420px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px; }
+.topbar nav { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 18px; color: var(--accent); text-decoration: none; }
+.demo-banner { background: #ffe9a8; text-align: center; padding: 6px; font-weight: 600; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 16px 0; }
+label { display: block; margin: 6px 0; font-weight: 500; }
+label.inline { display: inline-flex; gap: 6px; align-items: center; margin-right: 14px; font-weight: 400; }
+input, select, textarea { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+label.inline input { width: auto; }
+button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+button.secondary { background: #e8edf8; color: var(--accent); }
+button.danger { background: var(--danger); }
+button.link { background: none; color: var(--accent); padding: 0; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.row input { flex: 1; min-width: 200px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; align-items: end; }
+.muted { color: var(--muted); font-weight: 400; }
+.small { font-size: 13px; }
+.error { color: var(--danger); }
+.info { color: #1f7a3a; }
+.warning { background: var(--warn); border: 1px solid #f0d27a; border-radius: 6px; padding: 10px; margin: 10px 0; }
+.flag { color: #a15c00; font-weight: 600; font-size: 12px; }
+.tag { background: #eef; color: #335; border-radius: 4px; padding: 0 6px; margin-left: 6px; font-size: 12px; }
+.bar { height: 14px; background: #e6e9ef; border-radius: 7px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); transition: width .3s; }
+table { width: 100%; border-collapse: collapse; background: var(--card); }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr.excluded { opacity: .55; }
+.score-box { display: flex; gap: 16px; align-items: center; }
+.score { font-size: 40px; font-weight: 700; color: var(--accent); }
+.attribution { font-size: 12px; color: var(--muted); }
+.lead-card h2 { margin-top: 24px; }
+@media (max-width: 640px) { table { display: block; overflow-x: auto; } }
+@media print { .no-print { display: none !important; } body { background: #fff; } .container { max-width: none; } a { color: inherit; } }

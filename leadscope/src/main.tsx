@@ -1,6 +1,10 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
+
+// Podgląd online (build --mode artifact): nawigacja w pamięci strony, bez zmiany adresu.
+const PREVIEW = import.meta.env.VITE_PREVIEW === "true";
+const Router = PREVIEW ? MemoryRouter : BrowserRouter;
 import { api } from "./lib/api";
 import Login from "./pages/Login";
 import NewSearch from "./pages/NewSearch";
@@ -24,7 +28,7 @@ function App() {
           <button className="link" onClick={async () => { await api.signOut(); setSession(null); }}>Wyloguj ({session.email})</button>
         </nav>
       </header>
-      {api.mode === "mock" && <div className="demo-banner no-print">TRYB DEMO — dane fikcyjne, bez połączenia z Supabase i zewnętrznymi API.</div>}
+      {api.mode === "mock" && <div className="demo-banner no-print">TRYB DEMO — dane fikcyjne, bez połączenia z Supabase i zewnętrznymi API.{PREVIEW && " W tym podglądzie nie działa pobieranie CSV/XLSX ani drukowanie — działają po uruchomieniu u siebie."}</div>}
       <main className="container">
         <Routes>
           <Route path="/" element={<NewSearch />} />
@@ -40,6 +44,6 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter><App /></BrowserRouter>
+    <Router><App /></Router>
   </StrictMode>,
 );

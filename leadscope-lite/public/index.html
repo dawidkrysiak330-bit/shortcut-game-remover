@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LeadScope Lite</title>
+<style>
+  :root { --fg:#1d2330; --muted:#667085; --bg:#f6f7f9; --card:#fff; --accent:#2457d6; --danger:#c0352b; --border:#e2e5ea; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--fg); background:var(--bg); }
+  main { max-width:1150px; margin:0 auto; padding:16px; }
+  h1 { margin:8px 0 0; color:var(--accent); }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; margin:14px 0; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }
+  label { display:block; font-weight:500; }
+  label.inline { display:inline-flex; gap:6px; align-items:center; margin-right:16px; font-weight:400; }
+  input, select, textarea { width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; font:inherit; }
+  label.inline input { width:auto; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:8px 14px; font:inherit; cursor:pointer; }
+  button.danger { background:var(--danger); } button:disabled { opacity:.5; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .bar { height:14px; background:#e6e9ef; border-radius:7px; overflow:hidden; margin:8px 0; }
+  .bar > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
+  .muted { color:var(--muted); } .small { font-size:13px; } .error { color:var(--danger); }
+  .warning { background:#fff6db; border:1px solid #f0d27a; border-radius:6px; padding:10px; }
+  .demo { background:#ffe9a8; text-align:center; padding:6px; font-weight:600; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:14px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .src { color:var(--muted); font-size:11px; display:block; }
+  .tablewrap { overflow-x:auto; }
+  .attr { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="demo" class="demo" hidden>TRYB DEMO — dane fikcyjne, bez zapytań do Google</div>
+<main>
+  <h1>LeadScope Lite</h1>
+  <p class="muted">Wpisz frazy (jak w wyszukiwarce Map) — program pyta oficjalne Google Places API, odwiedza strony firm (z poszanowaniem robots.txt) i zbiera dane firmowe.</p>
+
+  <section class="card">
+    <div class="grid">
+      <label>Frazy — jedna w linii (max 10)
+        <textarea id="phrases" rows="5" placeholder="producent mebli&#10;hurtownia budowlana&#10;magazyn logistyczny"></textarea>
+      </label>
+      <div>
+        <label>Województwo *<select id="region"><option value="">— wybierz —</option></select></label>
+        <label>Miasto (opcjonalnie)<input id="city" placeholder="np. Kraków" /></label>
+        <label>Promień od miasta, km<input id="radius" type="number" min="1" max="300" /></label>
+      </div>
+      <div>
+        <label>Maks. liczba firm<input id="max" type="number" min="10" max="200" value="100" /></label>
+        <label class="inline"><input id="crawl" type="checkbox" checked /> odwiedź strony www (NIP, e-mail, telefon)</label>
+        <label class="inline"><input id="bl" type="checkbox" /> uzupełnij z Białej listy VAT (po NIP)</label>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="start">Szukaj</button>
+      <button id="cancel" class="danger" hidden>Przerwij</button>
+      <span id="msg" class="error"></span>
+    </div>
+  </section>
+
+  <section class="card" id="progressCard" hidden>
+    <div class="bar"><div id="bar"></div></div>
+    <div id="stage"></div>
+    <div class="small muted" id="cost"></div>
+  </section>
+
+  <section class="card" id="resultsCard" hidden>
+    <div class="row">
+      <b id="count"></b>
+      <label class="inline"><input id="onlyWww" type="checkbox" /> tylko ze stroną www</label>
+      <label class="inline"><input id="onlyNip" type="checkbox" /> tylko z NIP</label>
+      <label class="inline"><input id="onlyContact" type="checkbox" /> tylko z e-mailem lub telefonem ze strony</label>
+      <a id="export"><button>Eksport CSV</button></a>
+    </div>
+    <p class="warning small">⚠️ Program nie wysyła e-maili i nie dzwoni. <b>Pierwszy kontakt marketingowy e-mailem lub telefonem wymaga uprzedniej zgody odbiorcy</b> (art. 398 Prawa komunikacji elektronicznej) — także w B2B. JDG to dane osobowe (RODO).</p>
+    <p class="small muted">Eksport CSV nie zawiera treści z Google (nazwy, adresu, telefonu z Map) — tylko place_id i link do Map. Dane w eksporcie pochodzą ze stron www firm i z Białej listy, z datą i źródłem.</p>
+    <div class="tablewrap">
+      <table id="table">
+        <thead><tr><th>Firma (Google Maps)</th><th>WWW</th><th>NIP</th><th>E-mail firmowy</th><th>Telefon</th><th>Biała lista</th><th>Frazy</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="attr">Dane w kolumnie „Firma”: © Google Maps</p>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let jobId = null, timer = null, last = null;
+
+fetch("/api/config").then((r) => r.json()).then((c) => {
+  $("demo").hidden = !c.mock;
+  for (const r of c.regions) $("region").insertAdjacentHTML("beforeend", `<option value="${r.code}">${esc(r.name)}</option>`);
+});
+
+$("start").onclick = async () => {
+  $("msg").textContent = "";
+  const res = await fetch("/api/search", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      phrases: $("phrases").value, region_code: $("region").value, city: $("city").value, radius_km: $("radius").value,
+      max_results: $("max").value, crawl_websites: $("crawl").checked, use_biala_lista: $("bl").checked,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) { $("msg").textContent = data.error; return; }
+  jobId = data.id;
+  $("start").disabled = true; $("cancel").hidden = false; $("progressCard").hidden = false; $("resultsCard").hidden = true;
+  poll();
+};
+
+$("cancel").onclick = () => fetch(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+for (const id of ["onlyWww", "onlyNip", "onlyContact"]) $(id).onchange = () => last && render(last);
+
+async function poll() {
+  const j = await (await fetch(`/api/jobs/${jobId}`)).json();
+  last = j;
+  $("bar").style.width = j.progress + "%";
+  $("stage").textContent = `${j.progress}% — ${j.stage}${j.error ? " — " + j.error : ""}`;
+  $("cost").textContent = `Zapytania Google Places: ${j.places_requests} · Biała lista: ${j.biala_lista_requests} · koszt Google: ` +
+    (j.price_verified ? `$${j.cost_usd.toFixed(4)}` : "nie ustawiono ceny (PLACES_PRICE_PER_REQUEST_USD w .env)");
+  if (j.leads.length) render(j);
+  if (j.status === "running") timer = setTimeout(poll, 1000);
+  else { $("start").disabled = false; $("cancel").hidden = true; if (j.status === "failed") $("msg").textContent = j.error; }
+}
+
+const cell = (s) => s ? `${esc(s.value)}<span class="src">${s.source === "website" ? "strona www" : "Biała lista"} · ${s.fetched_at.slice(0, 16).replace("T", " ")}</span>` : `<span class="muted">brak</span>`;
+
+function render(j) {
+  let leads = j.leads;
+  if ($("onlyWww").checked) leads = leads.filter((l) => l.website);
+  if ($("onlyNip").checked) leads = leads.filter((l) => l.nip);
+  if ($("onlyContact").checked) leads = leads.filter((l) => l.email || l.phone);
+  $("resultsCard").hidden = false;
+  $("count").textContent = `Firm: ${leads.length} (z ${j.leads.length})`;
+  $("export").href = `/api/jobs/${j.id}/export.csv`;
+  $("table").tBodies[0].innerHTML = leads.map((l) => `<tr>
+    <td><a href="${esc(l.place.maps_url)}" target="_blank" rel="noreferrer">${esc(l.place.name)}</a><span class="src">${esc(l.place.address)}${l.place.phone ? " · " + esc(l.place.phone) : ""}</span></td>
+    <td>${l.website ? `<a href="${esc(l.website.value)}" target="_blank" rel="noreferrer">${esc(l.website.value.replace(/^https?:\/\//, ""))}</a>` : (l.place.website ? `<span class="muted small">${esc(l.www_note || "nie sprawdzono")}</span>` : '<span class="muted">brak</span>')}</td>
+    <td>${cell(l.nip)}</td><td>${cell(l.email)}</td><td>${cell(l.phone)}</td>
+    <td>${l.official_name ? cell(l.official_name) + (l.vat_status ? `<span class="src">VAT: ${esc(l.vat_status.value)}</span>` : "") : '<span class="muted">—</span>'}</td>
+    <td class="small">${esc(l.found_in.join(", "))}</td></tr>`).join("");
+}
+</script>
+</body>
+</html>

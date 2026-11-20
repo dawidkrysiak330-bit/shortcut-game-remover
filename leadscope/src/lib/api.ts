@@ -13,6 +13,9 @@ import { buildLeads } from "../../supabase/functions/_shared/core/pipeline.ts";
 import { regionByCode } from "../../supabase/functions/_shared/core/regions.ts";
 import { MOCK_ICP, mockRawRecords } from "./mockData";
 
+/** AI (Claude) jest płatne — domyślnie WYŁĄCZONE. Włączenie: VITE_AI_ENABLED=true + sekret AI_ENABLED=true w Edge Functions. */
+export const AI_ENABLED = import.meta.env.VITE_AI_ENABLED === "true";
+
 export type SearchStatus = {
   id: string;
   status: "queued" | "discovering" | "enriching" | "scoring" | "done" | "cancelled" | "failed";

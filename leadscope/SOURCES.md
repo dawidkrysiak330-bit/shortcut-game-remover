@@ -82,6 +82,7 @@ Zasada dodawania kolejnych źródeł: nowy adapter (`supabase/functions/_shared/
 - Przechowywanie: tekst ≤15 000 znaków na stronę, w `leads.website_pages`, z retencją leadów.
 - Uwaga prawna: regulamin konkretnej strony może zakazywać pobierania automatycznego — przy zgłoszeniu dopisz domenę do `suppression_list`.
 
-## Claude API (Anthropic) — przetwarzanie, nie źródło danych
+## Claude API (Anthropic) — przetwarzanie, nie źródło danych — **DOMYŚLNIE WYŁĄCZONE (płatne)**
+- Włączane sekretem `AI_ENABLED=true` + `VITE_AI_ENABLED=true`. Bez tego aplikacja nie wysyła nic do Anthropic.
 - Model domyślny: `claude-opus-5-5` (cena w `source_pricing`: $4 / $20 za 1 mln tokenów wej./wyj. — stan cennika z 2026-11, zweryfikuj na https://www.anthropic.com/pricing).
 - Wysyłamy wyłącznie dane firmy z rejestrów i www (bez danych prywatnych). Sprawdź warunki przetwarzania danych i umowę DPA Anthropic.

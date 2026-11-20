@@ -45,3 +45,4 @@ ale imienne e-maile pracowników już tak.
 - Każda wartość: `source` + `fetched_at` (+ `source_url`) — struktura `FieldValue`, test jednostkowy i E2E.
 - LLM: prompt systemowy zawiera „Jeśli informacji nie ma w dostarczonych danych — wpisz BRAK DANYCH. Nie zgaduj.”; odpowiedź = JSON walidowany zod; dodatkowo `groundingErrors()` odrzuca liczby spoza danych i punkty bez pola dowodowego. Odrzucone → `llm_rejections` + karta „BRAK DANYCH”.
 - Scoring i uzasadnienie są deterministyczne (bez LLM).
+- Domyślnie AI jest wyłączone: karta leada (`core/card.ts`) składa się z dosłownych cytatów z rejestru/www i powodów ze scoringu — każda karta przechodzi tę samą kontrolę `groundingErrors` (test jednostkowy).

@@ -7,7 +7,20 @@ Handlowiec wpisuje produkt, który sprzedaje jego firma, wybiera kraj i wojewód
 3. usuwa duplikaty, liczy score 0–100% z rozbiciem na składowe,
 4. pokazuje kartę leada i pozwala wyeksportować CSV/XLSX oraz zapisać kartę jako PDF.
 
-Stack: React + Vite, Supabase (Postgres + Auth + Edge Functions + RLS), Claude API.
+Stack: React + Vite, Supabase (Postgres + Auth + Edge Functions + RLS). AI (Claude) — opcjonalne, **domyślnie wyłączone**.
+
+## Koszty na start: 0 zł
+
+| Element | Koszt | Jak pilnujemy zera |
+|---|---|---|
+| AI (Claude) | płatne | **wyłączone** (`AI_ENABLED` nie ustawione). Profil kupca wypełniasz ręcznie; karta leada budowana regułami z zebranych danych. |
+| Google Places | darmowa pula miesięczna, potem płatne | twardy limit `GOOGLE_MONTHLY_REQUEST_LIMIT` (domyślnie 900/mies.) liczony z tabeli `api_usage` + zalecany limit dzienny w Google Cloud Console (patrz `../leadscope-lite/README.md`) |
+| Supabase | plan darmowy | limity planu darmowego (baza, Edge Functions) — **sprawdź aktualne** na https://supabase.com/pricing ; projekt darmowy może być wstrzymywany po okresie bezczynności |
+| GUS BIR, KRS, Biała lista, VIES, CEIDG, strony www | bezpłatne | limity zapytań w adapterach |
+
+Z pamięci (stan z 2025 r., niezweryfikowane): wyszukiwanie Places z polami www/telefon ma ok. 1000 darmowych zapytań miesięcznie. Google wymaga podpięcia karty do konta rozliczeniowego nawet przy korzystaniu wyłącznie z darmowej puli.
+
+**Włączenie AI później:** `VITE_AI_ENABLED=true` w `.env.local` + `AI_ENABLED=true` i `ANTHROPIC_API_KEY` w sekretach. Wtedy wraca przycisk „Zaproponuj profil kupca (AI)” i „Wygeneruj opis (AI)”.
 
 > **Ważne — co jest zweryfikowane, a co nie.** Środowisko, w którym powstał kod, nie miało dostępu do dokumentacji
 > Google ani do API rejestrów. Endpointy, limity, ceny i regulaminy są opisane z wiedzy ogólnej i **oznaczone
@@ -68,7 +81,8 @@ Każda wartość w `leads.data` ma postać `{ value, source, source_url, fetched
 
 | Sekret | Do czego | Gdzie zdobyć |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | ICP + karta leada | https://platform.claude.com/ → API Keys |
+| `ANTHROPIC_API_KEY` (**opcjonalny**, płatny) | ICP + karta z AI — tylko gdy `AI_ENABLED=true` | https://platform.claude.com/ → API Keys |
+| `GOOGLE_MONTHLY_REQUEST_LIMIT` | twardy miesięczny limit zapytań do Google (darmowa pula) | domyślnie 900 |
 | `GOOGLE_PLACES_API_KEY` | wyszukiwanie firm | https://console.cloud.google.com/ → włącz „Places API (New)” → Credentials → API key (ogranicz klucz do Places API; wymagane konto rozliczeniowe) |
 | `GUS_BIR_KEY` | REGON, PKD, forma prawna | https://api.stat.gov.pl/Home/RegonApi — wniosek o klucz (do testów: środowisko testowe + `GUS_BIR_ENV=test`) |
 | `CEIDG_API_TOKEN` (opcjonalny) | weryfikacja JDG | https://dane.biznes.gov.pl/ — wniosek o token |
@@ -129,10 +143,10 @@ Lokalnie potwierdzenia e-mail trafiają do Inbucket/Mailpit (adres pokazuje `sup
 
 ### Etap E2 — ICP
 ```bash
-cp supabase/.env.example supabase/.env     # uzupełnij ANTHROPIC_API_KEY (i resztę kluczy na kolejne etapy)
+cp supabase/.env.example supabase/.env     # klucze uzupełnisz w E3; AI zostaje wyłączone
 npx supabase@2.122.1 functions serve --env-file supabase/.env
 ```
-**Test E2:** w aplikacji wpisz np. „palety drewniane EPAL” → pojawia się ICP do edycji. W tabeli `icps` jest wpis, w `api_usage` koszt tokenów. Wpisz bezsensowną frazę wielokrotnie — jeśli model zwróci zły JSON, zobaczysz komunikat, a w `llm_rejections` — powód.
+**Test E2:** wpisz np. „palety drewniane EPAL” → „Utwórz profil kupca” → pojawia się pusty formularz ICP. Spróbuj szukać bez wypełnienia — aplikacja wskaże brakujące pola. Wypełnij: branże odbiorców, słowa kluczowe (frazy do Google), sygnały zakupowe, sygnały wykluczające, kody PKD.
 
 ### Etap E3 — Google Places + rejestry PL
 Uzupełnij w `supabase/.env`: `GOOGLE_PLACES_API_KEY`, `GUS_BIR_KEY` (lub `GUS_BIR_ENV=test` z kluczem testowym z dokumentacji GUS), opcjonalnie `CEIDG_API_TOKEN`, `BOT_INFO_URL`. Zrestartuj `functions serve`.
@@ -144,7 +158,7 @@ Kod: `core/dedup.ts`, `core/scoring.ts`. Wagi: Ustawienia → „Wagi scoringu�
 **Test E4:** `npm test` (testy dedup/scoring). W aplikacji: zmień wagę „Dopasowanie branży” na 50 i „Sygnały zakupowe” na 5 → nowe wyszukiwanie → składowe na karcie mają nowe maksima.
 
 ### Etap E5 — karta + eksport
-**Test E5:** otwórz kartę → „Wygeneruj opis i kąt rozmowy”. Sprawdź: ostrzeżenie art. 398, tabela „Źródła” z datą przy każdym polu, oznaczenia [BRAK DANYCH]/[NIEPEWNE]. „Drukuj / zapisz PDF” → PDF. Na liście wyników „Eksport CSV/XLSX” — kolumna „Źródła pól”, brak treści z Google.
+**Test E5:** otwórz kartę — opis (z KRS lub dosłowne zdania ze strony „o nas”), punkty „dlaczego może kupić” i kąt rozmowy powstają regułami z danych, bez AI. Sprawdź: ostrzeżenie art. 398, tabela „Źródła” z datą przy każdym polu, oznaczenia [BRAK DANYCH]/[NIEPEWNE]. „Drukuj / zapisz PDF” → PDF. Na liście wyników „Eksport CSV/XLSX” — kolumna „Źródła pól”, brak treści z Google.
 
 ### Etap E6 — filtry
 Obowiązkowe (kraj, województwo) i promień od miasta — przy starcie wyszukiwania. Dodatkowe (PKD, forma prawna, status, min. score, tylko z www, tylko z telefonem) — na liście wyników.
@@ -189,7 +203,7 @@ Uzasadnienie (1–2 zdania) składa się z powodów wyliczonych przez składowe 
 | ≥30 unikalnych firm w < 5 min | Na mockach: ✅ (test E2E). Na prawdziwych danych: **niezweryfikowane** — zależy od fraz i limitów Biała lista/GUS. Sprawdź w E3 (czas = `finished_at − created_at` w `searches`). |
 | ≥70% trafnych leadów ze score ≥60% (próba 20) | Wymaga Twojej ręcznej oceny. Eksportuj CSV, oceń 20 wierszy ze score ≥60; jeśli < 70% — popraw ICP (sygnały/PKD) lub wagi. |
 | 0 pól bez źródła | Wymuszone strukturą danych + test jednostkowy i E2E. |
-| 0 faktów spoza danych w opisach | Prompt „BRAK DANYCH. Nie zgaduj.” + schemat zod + kontrola liczb i pól dowodowych (`groundingErrors`); odrzucenia w `llm_rejections`. Kontrola jest heurystyczna — przy ocenie 20 leadów czytaj też opisy. |
+| 0 faktów spoza danych w opisach | Bez AI: opisy to dosłowne cytaty z rejestru/www + powody ze scoringu (test `card.test.ts` sprawdza każdą kartę). Z AI: prompt „BRAK DANYCH. Nie zgaduj.” + zod + `groundingErrors`, odrzucenia w `llm_rejections`. |
 | Koszt API widoczny w panelu | Pasek postępu + Ustawienia → „Koszty API”. Ceny Google są do uzupełnienia w `source_pricing` (`verified=false`). |
 
 ## 6. Ograniczenia MVP (świadome)

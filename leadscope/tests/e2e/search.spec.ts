@@ -6,15 +6,24 @@ test("pełny przepływ: fraza → ICP → wyszukiwanie → wyniki → karta → 
   await page.goto("/");
   await expect(page.getByText("TRYB DEMO")).toBeVisible();
 
-  // 1) fraza → ICP
+  // 1) fraza → pusty profil kupca (bez AI — zero kosztów)
   await page.getByTestId("phrase").fill("palety drewniane EPAL");
   await page.getByTestId("gen-icp").click();
-  const keywords = page.getByTestId("icp-keywords");
-  await expect(keywords).toContainText("producent mebli");
+  await expect(page.getByTestId("icp-keywords")).toHaveValue("");
 
-  // 2) użytkownik edytuje ICP przed wyszukiwaniem
-  await keywords.fill("producent mebli\nmagazyn logistyczny\nhurtownia");
+  // ICP niepełny → walidacja blokuje start
+  await page.getByTestId("region").selectOption("12");
+  await page.getByTestId("start").click();
+  await expect(page.getByText("Popraw ICP")).toBeVisible();
+
+  // 2) handlowiec wypełnia ICP ręcznie
+  await page.getByTestId("icp-buyer_industries").fill("producent mebli\nlogistyka");
+  await page.getByTestId("icp-pkd_codes").fill("31.09.Z\n52.10.B\n25.62.Z\n49.41.Z");
+  await page.getByTestId("icp-keywords").fill("producent mebli\nmagazyn logistyczny");
+  await page.getByTestId("icp-buying_signals").fill("wysyłka paletowa\nmagazyn wysokiego składowania\neksport\nprodukcja seryjna");
+  await page.getByTestId("icp-exclusion_signals").fill("produkcja palet\nskup palet");
   // 3) region obowiązkowy
+  await page.getByTestId("region").selectOption("");
   await page.getByTestId("start").click();
   await expect(page.getByText("Wybierz region")).toBeVisible();
   await page.getByTestId("region").selectOption("12"); // małopolskie
@@ -48,8 +57,10 @@ test("pełny przepływ: fraza → ICP → wyszukiwanie → wyniki → karta → 
   await expect(page.getByTestId("lead-card")).toBeVisible();
   await expect(page.getByTestId("consent-warning")).toContainText("art. 398");
   await expect(page.getByTestId("components")).toContainText("Dopasowanie branży");
-  await page.getByTestId("gen-card").click();
+  // karta bez AI: brak przycisku generowania, opis i kąt rozmowy z reguł
+  await expect(page.getByTestId("gen-card")).toHaveCount(0);
   await expect(page.getByText("Kąt rozmowy")).toBeVisible();
+  await expect(page.getByTestId("description")).not.toBeEmpty();
   // każdy wiersz w tabeli źródeł ma źródło i datę
   const srcRows = page.getByTestId("sources").locator("tbody tr");
   const n = await srcRows.count();
@@ -65,6 +76,8 @@ test("przerwanie wyszukiwania", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("phrase").fill("palety");
   await page.getByTestId("gen-icp").click();
+  await page.getByTestId("icp-buyer_industries").fill("logistyka");
+  await page.getByTestId("icp-keywords").fill("magazyn");
   await page.getByTestId("region").selectOption("12");
   await page.getByTestId("start").click();
   await page.getByRole("button", { name: "Przerwij wyszukiwanie" }).click();

@@ -9,7 +9,7 @@
 // =============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getClients, handler, HttpError, json } from "../_shared/http.ts";
-import { costMeter, type CostMeter } from "../_shared/costs.ts";
+import { costMeter, GOOGLE_MONTHLY_LIMIT, googleUsedThisMonth, type CostMeter } from "../_shared/costs.ts";
 import { googlePlaces, geocodeCity } from "../_shared/adapters/googlePlaces.ts";
 import { bialaLista } from "../_shared/adapters/bialaLista.ts";
 import { gusBir } from "../_shared/adapters/gusBir.ts";
@@ -102,7 +102,7 @@ async function tick(admin: SupabaseClient, s: Search, meter: CostMeter) {
       return update(admin, s.id, { status: "failed", message: "Przekroczono miesięczny limit wyszukiwań w planie", finished_at: new Date().toISOString() });
     }
     let center: { lat: number; lng: number } | undefined;
-    if (s.city && s.radius_km) center = (await geocodeCity(`${s.city}, ${region.name}`, s.country, ctx)) ?? undefined;
+    if (s.city && s.radius_km && await googleUsedThisMonth(admin) < GOOGLE_MONTHLY_LIMIT) center = (await geocodeCity(`${s.city}, ${region.name}`, s.country, ctx)) ?? undefined;
     return update(admin, s.id, { status: "discovering", progress: 2, message: "Szukam firm w Google Places…", job_state: { center, places: null } });
   }
 
@@ -114,6 +114,11 @@ async function tick(admin: SupabaseClient, s: Search, meter: CostMeter) {
     let count = state.discovered ?? 0;
     while (timeLeft() > 8000) {
       if (await cancelled() || overBudget()) break;
+      // Darmowa pula Google: po osiągnięciu limitu kończymy wyszukiwanie w Google i liczymy wynik z tego, co mamy.
+      if (await googleUsedThisMonth(admin) >= GOOGLE_MONTHLY_LIMIT) {
+        return update(admin, s.id, { status: "enriching", job_state: { ...state, places: placesState, discovered: count, enriched: [] },
+          message: `Osiągnięto miesięczny limit darmowych zapytań Google (${GOOGLE_MONTHLY_LIMIT}) — wzbogacam firmy znalezione do tej pory` });
+      }
       const r = await googlePlaces.search(params, ctx, placesState);
       placesState = r.state;
       if (r.records.length) {

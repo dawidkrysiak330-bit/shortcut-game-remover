@@ -1,7 +1,8 @@
 // Karta leada dla handlowca. PDF: przycisk "Drukuj / PDF" (przeglądarka → Zapisz jako PDF).
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api, type Card, type LeadRow } from "../lib/api";
+import { AI_ENABLED, api, type Card, type LeadRow } from "../lib/api";
+import { buildCard } from "../../supabase/functions/_shared/core/card.ts";
 import type { ComponentKey, FieldKey, FieldValue } from "../../supabase/functions/_shared/core/types.ts";
 import { comparable } from "../../supabase/functions/_shared/core/dedup.ts";
 import { BRAK, NO_DESCRIPTION } from "../../supabase/functions/_shared/core/schemas.ts";
@@ -44,7 +45,8 @@ export default function LeadCard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getLead(leadId!).then((l) => { setLead(l); setCard(l.card); }).catch((e) => setError(String(e.message ?? e)));
+    // Bez AI karta powstaje regułami, wyłącznie z zebranych danych (bez kosztów).
+    api.getLead(leadId!).then((l) => { setLead(l); setCard(l.card ?? (AI_ENABLED ? null : buildCard(l.company, l.score, l.product))); }).catch((e) => setError(String(e.message ?? e)));
   }, [leadId]);
 
   async function gen() {
@@ -71,7 +73,7 @@ export default function LeadCard() {
     <article className="lead-card" data-testid="lead-card">
       <div className="row no-print">
         <button onClick={() => window.print()}>Drukuj / zapisz PDF</button>
-        <button data-testid="gen-card" disabled={busy} onClick={gen}>{busy ? "Generuję…" : card ? "Wygeneruj kartę ponownie" : "Wygeneruj opis i kąt rozmowy"}</button>
+        {AI_ENABLED && <button data-testid="gen-card" disabled={busy} onClick={gen}>{busy ? "Generuję…" : card ? "Wygeneruj kartę ponownie" : "Wygeneruj opis i kąt rozmowy (AI)"}</button>}
         {lead.places_expired && <button className="secondary" onClick={refreshGoogle}>Odśwież dane Google</button>}
       </div>
 

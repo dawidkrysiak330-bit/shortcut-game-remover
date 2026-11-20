@@ -19,6 +19,7 @@ Zwróć JSON o polach:
 Nie wymyślaj kodów, których nie jesteś pewien — lepiej mniej kodów. Pola tekstowe po polsku.`;
 
 Deno.serve(handler(async (req) => {
+  if (Deno.env.get("AI_ENABLED") !== "true") throw new HttpError(403, "AI jest wyłączone (sekret AI_ENABLED). Wypełnij profil kupca ręcznie.");
   const { phrase, org_id } = await req.json();
   if (typeof phrase !== "string" || phrase.trim().length < 2 || phrase.length > 200) throw new HttpError(400, "Podaj frazę produktu (2–200 znaków)");
   const { userClient, admin } = await getClients(req);

@@ -7,6 +7,7 @@ import { getClients, handler, HttpError, json } from "../_shared/http.ts";
 import { callJson } from "../_shared/llm.ts";
 import { costMeter } from "../_shared/costs.ts";
 import { getPlace } from "../_shared/adapters/googlePlaces.ts";
+import { GOOGLE_MONTHLY_LIMIT, googleUsedThisMonth } from "../_shared/costs.ts";
 import { fallbackCard, groundingErrors, LeadCardLlmSchema, NO_DESCRIPTION } from "../_shared/core/schemas.ts";
 import type { FieldValue, MergedCompany } from "../_shared/core/types.ts";
 
@@ -28,6 +29,7 @@ Deno.serve(handler(async (req) => {
   // Odświeżenie danych Google po place_id (treści nie trzymamy trwale)
   if (action === "refresh_places") {
     if (!lead.place_id) return json({ places_data: null });
+    if (await googleUsedThisMonth(admin) >= GOOGLE_MONTHLY_LIMIT) throw new HttpError(429, "Wyczerpano miesięczny limit darmowych zapytań Google");
     const rec = await getPlace(lead.place_id, { meter, cancelled: async () => false });
     const places: Record<string, FieldValue[]> = {};
     for (const [k, v] of Object.entries(rec?.fields ?? {})) {
@@ -36,6 +38,8 @@ Deno.serve(handler(async (req) => {
     // zwracamy do wyświetlenia; NIE zapisujemy ponownie w bazie
     return json({ places_data: places, cost_usd: meter.total() });
   }
+
+  if (Deno.env.get("AI_ENABLED") !== "true") throw new HttpError(403, "AI jest wyłączone — karta jest budowana regułami w aplikacji.");
 
   // Generowanie karty — wejście: tylko dane z rejestrów i www (+ ewentualnie jeszcze ważne dane Google)
   const fields = { ...(lead.data ?? {}) } as MergedCompany["fields"];

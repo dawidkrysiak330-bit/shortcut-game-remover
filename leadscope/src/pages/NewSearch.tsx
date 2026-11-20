@@ -1,7 +1,7 @@
 // Krok 1: fraza → ICP. Krok 2: edycja ICP. Krok 3: kraj/region (+promień) → start, postęp, przerwanie.
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type SearchStatus } from "../lib/api";
+import { AI_ENABLED, api, type SearchStatus } from "../lib/api";
 import type { Icp, Scale } from "../../supabase/functions/_shared/core/types.ts";
 import { IcpSchema } from "../../supabase/functions/_shared/core/schemas.ts";
 import { REGIONS } from "../../supabase/functions/_shared/core/regions.ts";
@@ -31,6 +31,11 @@ export default function NewSearch() {
   const searchId = useRef<string | null>(null);
 
   async function makeIcp() {
+    if (!AI_ENABLED) {
+      // Bez AI: pusty profil do wypełnienia przez handlowca (zero kosztów)
+      setIcp({ product: phrase.trim(), buyer_industries: [], pkd_codes: [], nace_codes: [], keywords: [], buying_signals: [], exclusion_signals: [], target_scale: [] });
+      return;
+    }
     setBusy(true); setError(null);
     try { setIcp(await api.generateIcp(phrase)); } catch (e) { setError(String(e instanceof Error ? e.message : e)); }
     setBusy(false);
@@ -70,14 +75,16 @@ export default function NewSearch() {
         <h2>1. Co sprzedaje Twoja firma?</h2>
         <div className="row">
           <input data-testid="phrase" placeholder="np. palety drewniane EPAL" value={phrase} onChange={(e) => setPhrase(e.target.value)} />
-          <button data-testid="gen-icp" disabled={busy || phrase.trim().length < 2} onClick={makeIcp}>{busy ? "Generuję…" : "Zaproponuj profil kupca (ICP)"}</button>
+          <button data-testid="gen-icp" disabled={busy || phrase.trim().length < 2} onClick={makeIcp}>{busy ? "Generuję…" : AI_ENABLED ? "Zaproponuj profil kupca (AI)" : "Utwórz profil kupca (ICP)"}</button>
         </div>
       </section>
 
       {icp && (
         <section className="card">
           <h2>2. Sprawdź i popraw profil kupca</h2>
-          <p className="muted">To propozycja modelu AI — hipoteza, nie fakty. Popraw ją przed wyszukiwaniem (jedna pozycja w linii).</p>
+          <p className="muted">{AI_ENABLED
+            ? "To propozycja modelu AI — hipoteza, nie fakty. Popraw ją przed wyszukiwaniem (jedna pozycja w linii)."
+            : "Wpisz, KTO kupuje Twój produkt (jedna pozycja w linii). Wymagane: co najmniej jedna branża odbiorców i jedno słowo kluczowe. Kody PKD sprawdzisz w klasyfikacji PKD 2007 (GUS)."}</p>
           <div className="grid2">
             {LIST_FIELDS.map((f) => (
               <label key={f.key}>{f.label} <span className="muted">({f.hint})</span>

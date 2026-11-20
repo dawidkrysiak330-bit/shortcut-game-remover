@@ -1,6 +1,21 @@
 // Licznik kosztów API: każde wywołanie płatnego/limitowanego źródła zapisujemy w api_usage.
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Twardy miesięczny limit zapytań do Google (wspólny dla całej aplikacji — jeden klucz API). */
+export const GOOGLE_MONTHLY_LIMIT = Number(Deno.env.get("GOOGLE_MONTHLY_REQUEST_LIMIT") ?? "900");
+
+/** Ile zapytań do Google wykonano w bieżącym miesiącu (z tabeli api_usage). */
+export async function googleUsedThisMonth(admin: SupabaseClient): Promise<number> {
+  const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0);
+  let total = 0;
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin.from("api_usage").select("units").eq("source", "google_places").gte("created_at", start.toISOString()).range(from, from + 999);
+    if (error) throw error;
+    total += (data ?? []).reduce((a, r) => a + Number(r.units), 0);
+    if (!data || data.length < 1000) return total;
+  }
+}
+
 let pricingCache: Map<string, number> | null = null;
 
 async function pricing(admin: SupabaseClient): Promise<Map<string, number>> {

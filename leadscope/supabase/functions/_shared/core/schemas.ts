@@ -28,7 +28,7 @@ export type IcpParsed = z.infer<typeof IcpSchema>;
 
 const FIELD_KEYS = [
   "name", "nip", "regon", "krs", "legal_form", "status", "vat_status", "registration_date", "address",
-  "postal_code", "city", "region", "website", "phone", "email", "pkd", "description_text", "types",
+  "postal_code", "city", "region", "website", "phone", "email", "pkd", "description_text", "types", "business_status", "lat", "lng",
 ] as const;
 
 export const LeadCardLlmSchema = z.object({

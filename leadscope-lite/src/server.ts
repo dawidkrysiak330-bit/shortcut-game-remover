@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { REGIONS } from "../../leadscope/supabase/functions/_shared/core/regions.ts";
 import { mockProviders, realProviders, type Providers } from "./providers.ts";
 import { runJob, toCsv, type Job } from "./job.ts";
+import { fileQuota, memoryQuota } from "./quota.ts";
 
 const envFile = new URL("../.env", import.meta.url);
 if (existsSync(envFile)) process.loadEnvFile(envFile.pathname);
@@ -25,6 +26,9 @@ if (!MOCK && !process.env.GOOGLE_PLACES_API_KEY) {
   process.exit(1);
 }
 const providers: Providers = MOCK ? mockProviders() : realProviders(process.env.GOOGLE_PLACES_API_KEY!);
+// Miesięczny limit zapytań do Google = gwarancja, że zostajemy w darmowej puli (patrz README).
+const FREE_LIMIT = Number(process.env.GOOGLE_MONTHLY_REQUEST_LIMIT ?? 900);
+const quota = MOCK ? memoryQuota(FREE_LIMIT) : fileQuota(new URL("../.usage.json", import.meta.url).pathname, FREE_LIMIT);
 const jobs = new Map<string, Job>();
 
 // sprzątanie starych zadań
@@ -45,7 +49,7 @@ function publicJob(j: Job) {
   return {
     id: j.id, status: j.status, stage: j.stage, progress: j.progress, error: j.error,
     places_requests: j.places_requests, biala_lista_requests: j.biala_lista_requests,
-    cost_usd: j.places_requests * PRICE, price_verified: PRICE > 0,
+    cost_usd: j.places_requests * PRICE, price_verified: PRICE > 0, quota: quota.status(), quota_note: j.quota_note,
     leads: j.leads,
   };
 }
@@ -61,7 +65,7 @@ const server = createServer(async (req, res) => {
       return send(res, 200, await readFile(new URL("../public/index.html", import.meta.url), "utf-8"), "text/html; charset=utf-8");
     }
     if (req.method === "GET" && url.pathname === "/api/config") {
-      return send(res, 200, { mock: MOCK, price_per_request: PRICE, regions: REGIONS.map((r) => ({ code: r.code, name: r.name })) });
+      return send(res, 200, { mock: MOCK, price_per_request: PRICE, quota: quota.status(), regions: REGIONS.map((r) => ({ code: r.code, name: r.name })) });
     }
     if (req.method === "POST" && url.pathname === "/api/search") {
       const b = await readJson(req);
@@ -79,7 +83,8 @@ const server = createServer(async (req, res) => {
         },
       };
       jobs.set(job.id, job);
-      void runJob(job, providers);
+      if (quota.status().remaining === 0) return send(res, 429, { error: `Wyczerpano miesięczny limit darmowych zapytań Google (${FREE_LIMIT}). Odnowi się w nowym miesiącu.` });
+      void runJob(job, providers, quota);
       return send(res, 200, { id: job.id });
     }
     const m = url.pathname.match(/^\/api\/jobs\/([\w-]+)(\/cancel|\/export\.csv)?$/);

@@ -58,6 +58,8 @@
       <button id="cancel" class="danger" hidden>Przerwij</button>
       <span id="msg" class="error"></span>
     </div>
+    <div class="small muted" id="quota"></div>
+    <div class="small muted">Jedno wyszukiwanie zużywa do 3 zapytań na frazę (+1, jeśli podasz miasto). Szacunek dla wpisanych fraz: <b id="estimate">0</b>.</div>
   </section>
 
   <section class="card" id="progressCard" hidden>
@@ -91,8 +93,12 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let jobId = null, timer = null, last = null;
 
+const showQuota = (q) => { $("quota").textContent = `Darmowa pula Google w tym miesiącu (${q.month}): zużyto ${q.used} z ${q.limit} zapytań, zostało ${q.remaining}.`; };
+const estimate = () => { $("estimate").textContent = $("phrases").value.split("\n").filter((s) => s.trim().length >= 2).slice(0, 10).length * 3 + ($("city").value.trim() ? 1 : 0); };
+$("phrases").oninput = estimate; $("city").oninput = estimate;
 fetch("/api/config").then((r) => r.json()).then((c) => {
   $("demo").hidden = !c.mock;
+  showQuota(c.quota);
   for (const r of c.regions) $("region").insertAdjacentHTML("beforeend", `<option value="${r.code}">${esc(r.name)}</option>`);
 });
 
@@ -120,8 +126,10 @@ async function poll() {
   last = j;
   $("bar").style.width = j.progress + "%";
   $("stage").textContent = `${j.progress}% — ${j.stage}${j.error ? " — " + j.error : ""}`;
-  $("cost").textContent = `Zapytania Google Places: ${j.places_requests} · Biała lista: ${j.biala_lista_requests} · koszt Google: ` +
-    (j.price_verified ? `$${j.cost_usd.toFixed(4)}` : "nie ustawiono ceny (PLACES_PRICE_PER_REQUEST_USD w .env)");
+  $("cost").textContent = `Zapytania Google Places w tym wyszukiwaniu: ${j.places_requests} · Biała lista: ${j.biala_lista_requests} (bezpłatna)` +
+    (j.price_verified ? ` · koszt ponad darmową pulę: $${j.cost_usd.toFixed(4)}` : "");
+  showQuota(j.quota);
+  if (j.quota_note) $("msg").textContent = j.quota_note;
   if (j.leads.length) render(j);
   if (j.status === "running") timer = setTimeout(poll, 1000);
   else { $("start").disabled = false; $("cancel").hidden = true; if (j.status === "failed") $("msg").textContent = j.error; }

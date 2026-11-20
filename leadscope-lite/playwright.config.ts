@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 // Testy w trybie demo (dane fikcyjne, bez Google). Własna przeglądarka: PW_CHROMIUM_PATH.
 export default defineConfig({
   testDir: "tests",
+  testMatch: "*.spec.ts",
   timeout: 90_000,
   use: {
     baseURL: "http://localhost:8799",

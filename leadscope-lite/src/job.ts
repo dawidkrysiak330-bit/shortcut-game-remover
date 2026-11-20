@@ -7,6 +7,7 @@ import { extractGenericEmails, extractNips, extractPhones, normalizeDomain, norm
 import { htmlToText, isAllowedByRobots, pickSubpages } from "../../leadscope/supabase/functions/_shared/core/web.ts";
 import type { Region } from "../../leadscope/supabase/functions/_shared/core/regions.ts";
 import type { Place, Providers } from "./providers.ts";
+import type { Quota } from "./quota.ts";
 
 /** Wartość + źródło + data pobrania (każde pole ma źródło). */
 export interface Sourced { value: string; source: "website" | "biala_lista"; url: string; fetched_at: string }
@@ -44,6 +45,7 @@ export interface Job {
   progress: number;
   error?: string;
   places_requests: number;
+  quota_note?: string; // ustawione, gdy zatrzymaliśmy się na miesięcznym limicie darmowych zapytań
   biala_lista_requests: number;
   leads: Lead[];
   created_at: number;
@@ -59,12 +61,12 @@ const DELAY_SCALE = process.argv.includes("--demo") || process.env.LITE_MOCK ===
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * DELAY_SCALE));
 const now = () => new Date().toISOString();
 
-export async function runJob(job: Job, p: Providers): Promise<void> {
+export async function runJob(job: Job, p: Providers, quota: Quota): Promise<void> {
   try {
     // ---------- 1. Google Places ----------
     const { region, city, radius_km } = job.params;
     let center = { lat: region.capital.lat, lng: region.capital.lng };
-    if (city) {
+    if (city && quota.take()) {
       job.stage = `Ustalam położenie: ${city}`;
       const g = await p.geocode(`${city}, ${region.name}`);
       job.places_requests++;
@@ -77,6 +79,11 @@ export async function runJob(job: Job, p: Providers): Promise<void> {
       const query = city ? `${phrases[i]} ${city}` : `${phrases[i]} województwo ${region.name}`;
       let token: string | undefined;
       for (let page = 0; page < PAGES_PER_PHRASE && !job.cancel; page++) {
+        // Twardy limit: nie wychodzimy poza darmową pulę miesięczną.
+        if (!quota.take()) {
+          job.quota_note = `Osiągnięto miesięczny limit darmowych zapytań Google (${quota.status().limit}). Pokazuję firmy zebrane do tej pory; limit odnowi się w nowym miesiącu.`;
+          break;
+        }
         job.stage = `Google Places: „${phrases[i]}” — strona ${page + 1}`;
         const r = await p.placesSearch(query, center, radiusM, token);
         job.places_requests++;
@@ -92,7 +99,7 @@ export async function runJob(job: Job, p: Providers): Promise<void> {
         token = r.nextPageToken;
         if (!token || byId.size >= job.params.max_results) break;
       }
-      if (byId.size >= job.params.max_results) break;
+      if (byId.size >= job.params.max_results || job.quota_note) break;
     }
     // Deduplikacja 2: różne place_id, ta sama domena lub telefon (oddziały/duplikaty wpisów)
     const seen = new Set<string>();

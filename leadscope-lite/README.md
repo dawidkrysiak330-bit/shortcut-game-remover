@@ -26,11 +26,31 @@ Otwórz http://localhost:8787, wpisz frazy, wybierz „małopolskie”, kliknij 
 1. Klucz Google: https://console.cloud.google.com/ → utwórz projekt → włącz **Places API (New)** → *Credentials* → *Create API key*.
    Ogranicz klucz do „Places API (New)”. Wymagane jest konto rozliczeniowe.
 2. Skopiuj `.env.example` jako `.env` i wklej klucz w `GOOGLE_PLACES_API_KEY`.
-3. Sprawdź w cenniku Google cenę jednego zapytania Text Search dla używanych pól (nazwa, adres, telefon, www, ocena — to zwykle wyższy SKU) i wpisz ją w `PLACES_PRICE_PER_REQUEST_USD`. Bez tego licznik kosztów pokaże „nie ustawiono ceny”.
-   Cennik: https://developers.google.com/maps/billing-and-pricing/pricing
-4. `npm start` → http://localhost:8787
+3. `npm start` → http://localhost:8787
 
-**Koszt jednego wyszukiwania** ≈ liczba fraz × do 3 stron wyników (+1 zapytanie, jeśli podasz miasto) × cena zapytania. Przykład: 5 fraz → do 15–16 zapytań.
+## Jak zostać w 100% za darmo
+
+| Element | Koszt |
+|---|---|
+| Strony www firm, Biała lista VAT | bezpłatne |
+| Google Places API | bezpłatne do miesięcznej darmowej puli, potem płatne |
+
+**Google — co wiem i czego nie mogłem sprawdzić.** Z mojej wiedzy (stan z 2025 r.): Google zastąpił miesięczny kredyt $200
+darmowymi limitami na każdy rodzaj zapytania. Wyszukiwanie z polami www i telefon należy do kategorii **Enterprise**: około
+**1000 darmowych zapytań miesięcznie**, powyżej — rzędu $35 za 1000. Tego nie dało się zweryfikować z miejsca, w którym powstał kod.
+**Sprawdź w Google Cloud Console → Billing / cennik**: https://developers.google.com/maps/billing-and-pricing/pricing
+
+**Zabezpieczenia przed kosztami (zrób oba):**
+1. **W programie** — `GOOGLE_MONTHLY_REQUEST_LIMIT=900` w `.env`. Program liczy zapytania w pliku `.usage.json` i po osiągnięciu
+   limitu przestaje pytać Google (pokazuje firmy zebrane do tej pory). Licznik zeruje się z nowym miesiącem i przetrwa restart programu.
+2. **W Google** — Cloud Console → *APIs & Services* → *Places API (New)* → *Quotas* → ustaw limit dzienny zapytań Text Search
+   (np. 30/dzień ≈ 900/mies.). To twarda blokada po stronie Google, działa nawet gdy program się pomyli.
+   Uwaga: *budżet i alerty* w Billing tylko **powiadamiają**, nie blokują wydatków.
+
+Google wymaga podpięcia karty do konta rozliczeniowego nawet przy korzystaniu wyłącznie z darmowej puli.
+
+**Ile to wyszukiwań?** Jedno wyszukiwanie = do 3 zapytań na frazę (+1, jeśli podasz miasto). Przy 900 zapytaniach:
+5 fraz → ok. 60 wyszukiwań miesięcznie, każde do ~300 wyników przed deduplikacją. Strona pokazuje zużycie puli i szacunek przed startem.
 
 ### Test
 ```bash
